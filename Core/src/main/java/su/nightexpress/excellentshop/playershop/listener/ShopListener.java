@@ -23,6 +23,7 @@ import org.bukkit.inventory.*;
 import org.jspecify.annotations.NonNull;
 
 import su.nightexpress.excellentshop.ShopPlugin;
+import su.nightexpress.excellentshop.integration.claim.WorldGuardFlags;
 import su.nightexpress.excellentshop.playershop.ChestShopModule;
 import su.nightexpress.excellentshop.playershop.ChestUtils;
 import su.nightexpress.excellentshop.playershop.core.ChestConfig;
@@ -265,5 +266,14 @@ public class ShopListener extends AbstractListener<ShopPlugin> {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onChunkUnload(ChunkUnloadEvent event) {
         this.module.handleChunkUnload(event.getChunk());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if(!event.isCancelled()) return;
+        if (!module.isShopBlock(ChestUtils.getShopItemType(event.getItemInHand()))) return;
+        if (WorldGuardFlags.checkFlag(event.getPlayer(), event.getBlock().getLocation())) {
+            event.setCancelled(false);
+        }
     }
 }
