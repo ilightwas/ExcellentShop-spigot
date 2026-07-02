@@ -15,4 +15,6 @@ public interface ShopModuleSettings {
     ProductClickSettings getProductClickSettings();
 
     boolean isBuyingMenuCloseAfterPurchase();
+
+    boolean isSellingMenuCloseAfterSale();
 }

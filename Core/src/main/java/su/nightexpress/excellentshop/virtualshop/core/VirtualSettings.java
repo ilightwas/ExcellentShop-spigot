@@ -55,6 +55,12 @@ public class VirtualSettings extends AbstractConfig implements ShopModuleSetting
         "Controls whether Buying Menu should be closed after purchase instead of return back to Shop Menu."
     );
 
+    private final ConfigProperty<Boolean> guiSellingCloseAfterSale = this.addProperty(ConfigTypes.BOOLEAN,
+        "GUI.Selling.Close-After-Sale",
+        false,
+        "Controls whether Selling Menu should be closed after sale instead of return back to Shop Menu."
+    );
+
     @NonNull
     private static Map<TradeStatus, List<String>> getDefaultProducePriceInfo() {
         Map<TradeStatus, List<String>> map = new LinkedHashMap<>();
@@ -224,5 +230,10 @@ public class VirtualSettings extends AbstractConfig implements ShopModuleSetting
     @Override
     public boolean isBuyingMenuCloseAfterPurchase() {
         return this.guiBuyingCloseAfterPurcahse.get();
+    }
+
+    @Override
+    public boolean isSellingMenuCloseAfterSale() {
+        return this.guiSellingCloseAfterSale.get();
     }
 }

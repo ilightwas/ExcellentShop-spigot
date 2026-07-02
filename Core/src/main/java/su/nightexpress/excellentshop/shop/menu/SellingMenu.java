@@ -580,7 +580,11 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
                 }
             }
 
-            this.goBack(context);
+            if (data.module.getSettings().isSellingMenuCloseAfterSale()) {
+                context.getViewer().closeMenu();
+            } else {
+                this.goBack(context);
+            }
         });
     }
 
