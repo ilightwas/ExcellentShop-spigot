@@ -1093,13 +1093,6 @@ public class ChestShopModule extends AbstractShopModule implements PlayerShopMan
     public boolean deleteShop(@NonNull Player player, @NonNull ChestShop shop) {
         if (!this.canBreak(player, shop)) return false;
 
-        if (ChestUtils.isInfiniteStorage()) {
-            if (shop.getValidProducts().stream().anyMatch(product -> product.getStock() > 0)) {
-                this.sendPrefixed(ChestLang.SHOP_REMOVAL_ERROR_NOT_EMPTY, player);
-                return false;
-            }
-        }
-
         Bank bank = this.getEffectiveBank(shop);
         if (bank != null && !bank.getAccount().hasZeroBalance()) {
             this.sendPrefixed(ChestLang.SHOP_REMOVAL_ERROR_BANK_NOT_EMPTY, player);
@@ -1111,6 +1104,13 @@ public class ChestShopModule extends AbstractShopModule implements PlayerShopMan
         if (isCreatedFromItem && shopBlock != null) {
             if (Players.countItemSpace(player, shopBlock.getItemStack()) < 1) {
                 this.sendPrefixed(ChestLang.SHOP_REMOVAL_ERROR_INV_FULL_FOR_CHESTITEM, player);
+                return false;
+            }
+        }
+
+        if (ChestUtils.isInfiniteStorage() || isCreatedFromItem) {
+            if (shop.getValidProducts().stream().anyMatch(product -> product.getStock() > 0)) {
+                this.sendPrefixed(ChestLang.SHOP_REMOVAL_ERROR_NOT_EMPTY, player);
                 return false;
             }
         }
