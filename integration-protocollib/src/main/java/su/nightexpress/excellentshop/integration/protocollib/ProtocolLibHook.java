@@ -1,7 +1,8 @@
 package su.nightexpress.excellentshop.integration.protocollib;
 
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.Plugin;
 import org.jspecify.annotations.NonNull;
+
 import su.nightexpress.excellentshop.api.menu.SellingMenuAdapter;
 import su.nightexpress.excellentshop.api.menu.SellingMenuProvider;
 import su.nightexpress.excellentshop.api.packet.PacketLibrary;
@@ -19,7 +20,7 @@ public class ProtocolLibHook implements PacketLibrary {
 
     @Override
     @NonNull
-    public SellingMenuAdapter createSellingMenuAdapter(@NonNull JavaPlugin plugin, @NonNull SellingMenuProvider provider) {
+    public SellingMenuAdapter createSellingMenuAdapter(@NonNull Plugin plugin, @NonNull SellingMenuProvider provider) {
         return new ProtocolLibSellingMenuAdapter(plugin, provider);
     }
 

@@ -35,6 +35,7 @@ import su.nightexpress.excellentshop.core.Lang;
 import su.nightexpress.excellentshop.shop.AbstractShopModule;
 import su.nightexpress.excellentshop.util.PacketUtils;
 import su.nightexpress.excellentshop.util.ShopUtils;
+import su.nightexpress.nightcore.NightCorePlugin;
 import su.nightexpress.nightcore.config.FileConfig;
 import su.nightexpress.nightcore.configuration.ConfigTypes;
 import su.nightexpress.nightcore.ui.inventory.MenuRegistry;
@@ -258,10 +259,11 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
         if (this.isProductSlot(rawSlot)) {
             ItemStack cursor = event.getCursor();
             if (!cursor.getType().isAir()) {
-                ItemStack copyStack = new ItemStack(cursor);
+                ItemStack cursorCopy = new ItemStack(cursor);
                 cursor.setAmount(0);
+
                 this.plugin.runTask(() -> {
-                    this.addItem(context, copyStack, true, leftover -> event.getView().setCursor(leftover));
+                    this.addItem(context, cursorCopy, true, leftover -> event.getView().setCursor(leftover));
                 });
                 return;
             }
@@ -444,16 +446,22 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
             int otherUnitSize = other.product.getUnitSize();
             int otherMaxStackSize = other.product.getEffectivePreview().getMaxStackSize();
             int otherMaxUnitsPerStack = otherMaxStackSize / otherUnitSize;
-            int otherUnitStacks = (int) Math.ceil((double) other.units / (double) otherMaxUnitsPerStack);
+            int otherUnitStacks = (int) Math.ceil(other.units / otherMaxUnitsPerStack);
 
             maxAllowedUnits -= (otherUnitStacks * maxUnitsPerStack);
         }
 
-        if (maxAllowedUnits <= 0) return;
+        if (maxAllowedUnits <= 0) {
+            consumer.accept(clickedItem);
+            return;
+        }
 
         // Don't allow to put item for sell if any limit(s) reached.
         int maxSellableUnitAmount = product.getMaxSellableUnitAmount(player, inventory);
-        if (maxSellableUnitAmount == 0) return;
+        if (maxSellableUnitAmount == 0) {
+            consumer.accept(clickedItem);
+            return;
+        }
 
         int pureSellUnits = itemUnits;
         if (maxSellableUnitAmount > 0) {

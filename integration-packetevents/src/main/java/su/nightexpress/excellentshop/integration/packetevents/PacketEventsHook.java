@@ -1,7 +1,8 @@
 package su.nightexpress.excellentshop.integration.packetevents;
 
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.Plugin;
 import org.jspecify.annotations.NonNull;
+
 import su.nightexpress.excellentshop.api.menu.SellingMenuProvider;
 import su.nightexpress.excellentshop.api.packet.PacketLibrary;
 import su.nightexpress.excellentshop.api.packet.display.DisplayAdapter;
@@ -19,7 +20,8 @@ public class PacketEventsHook implements PacketLibrary {
 
     @Override
     @NonNull
-    public PacketEventsSellingMenuAdapter createSellingMenuAdapter(@NonNull JavaPlugin plugin, @NonNull SellingMenuProvider provider) {
+    public PacketEventsSellingMenuAdapter createSellingMenuAdapter(@NonNull Plugin plugin,
+                                                                   @NonNull SellingMenuProvider provider) {
         return new PacketEventsSellingMenuAdapter(provider);
     }
 
