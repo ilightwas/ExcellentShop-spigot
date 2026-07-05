@@ -137,7 +137,7 @@ public class BankManager extends AbstractManager<ShopPlugin> {
             return;
         }
 
-        currency.withdrawAsync(player, amount).whenCompleteAsync((result, throwable) -> {
+        currency.withdrawAsync(player, depositAmount).whenCompleteAsync((result, throwable) -> {
             if (throwable != null) {
                 throwable.printStackTrace();
                 return;
