@@ -138,26 +138,22 @@ public class BankManagementDialog extends Dialog<Bank> {
                     .build()
             )
             .handleResponse(ACTION_DEPOSIT_ALL, (viewer, identifier, nbtHolder) -> {
-                this.depositOrWithdraw(player, bank, nbtHolder, MODE_DEPOSIT, true);
-                this.show(player, bank, viewer.getCallback());
+                this.depositOrWithdraw(player, bank, nbtHolder, MODE_DEPOSIT, true, () -> this.show(player, bank, viewer.getCallback()));
             })
             .handleResponse(ACTION_DEPOSIT_SPECIFIED, (viewer, identifier, nbtHolder) -> {
-                this.depositOrWithdraw(player, bank, nbtHolder, MODE_DEPOSIT, false);
-                this.show(player, bank, viewer.getCallback());
+                this.depositOrWithdraw(player, bank, nbtHolder, MODE_DEPOSIT, false, () -> this.show(player, bank, viewer.getCallback()));
             })
             .handleResponse(ACTION_WITHDRAW_ALL, (viewer, identifier, nbtHolder) -> {
-                this.depositOrWithdraw(player, bank, nbtHolder, MODE_WITHDRAW, true);
-                this.show(player, bank, viewer.getCallback());
+                this.depositOrWithdraw(player, bank, nbtHolder, MODE_WITHDRAW, true, () -> this.show(player, bank, viewer.getCallback()));
             })
             .handleResponse(ACTION_WITHDRAW_SPECIFIED, (viewer, identifier, nbtHolder) -> {
-                this.depositOrWithdraw(player, bank, nbtHolder, MODE_WITHDRAW, false);
-                this.show(player, bank, viewer.getCallback());
+                this.depositOrWithdraw(player, bank, nbtHolder, MODE_WITHDRAW, false, () -> this.show(player, bank, viewer.getCallback()));
             })
         );
     }
 
     private void depositOrWithdraw(@NonNull Player player, @NonNull Bank bank, @Nullable NightNbtHolder nbtHolder,
-                                   int mode, boolean all) {
+                                   int mode, boolean all, Runnable refreshUI) {
         if (nbtHolder == null) return;
 
         String currencyId = nbtHolder.getText(JSON_CURRENCY).orElse(null);
@@ -169,10 +165,10 @@ public class BankManagementDialog extends Dialog<Bank> {
         double amount = all ? -1D : Math.abs(nbtHolder.getDouble(JSON_AMOUNT, 0D));
 
         if (mode == MODE_DEPOSIT) {
-            this.bankManager.depositToBank(player, bank, currency, amount);
+            this.bankManager.depositToBank(player, bank, currency, amount, refreshUI);
         }
         else if (mode == MODE_WITHDRAW) {
-            this.bankManager.withdrawFromBank(player, bank, currency, amount);
+            this.bankManager.withdrawFromBank(player, bank, currency, amount, refreshUI);
         }
     }
 }
