@@ -24,7 +24,10 @@ import su.nightexpress.nightcore.util.text.night.wrapper.TagWrappers;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class BankManagementDialog extends Dialog<Bank> {
@@ -85,10 +88,12 @@ public class BankManagementDialog extends Dialog<Bank> {
 
     private final ChestShopModule module;
     private final BankManager     bankManager;
+    private final Map<UUID, Double> lastInput;
 
     public BankManagementDialog(@NonNull ChestShopModule module, @NonNull BankManager bankManager) {
         this.module = module;
         this.bankManager = bankManager;
+        this.lastInput = new HashMap<>();
     }
 
     @Override
@@ -113,11 +118,11 @@ public class BankManagementDialog extends Dialog<Bank> {
             }).collect(Collectors.joining("\n")))
             .build();
 
-        return Dialogs.create(builder -> builder
+        return Dialogs.create(builder -> { builder
             .base(DialogBases.builder(TITLE)
                 .body(DialogBodies.plainMessage(BODY.replace(bodyContext)))
                 .inputs(
-                    DialogInputs.text(JSON_AMOUNT, INPUT_AMOUNT).initial(String.valueOf(0)).maxLength(10).build(),
+                    DialogInputs.text(JSON_AMOUNT, INPUT_AMOUNT).initial(String.valueOf(lastInput.getOrDefault(player.getUniqueId(), 0D))).maxLength(10).build(),
                     DialogInputs.singleOption(JSON_CURRENCY, INPUT_CURRENCY, entries).build()
                 )
                 .build()
@@ -148,8 +153,10 @@ public class BankManagementDialog extends Dialog<Bank> {
             })
             .handleResponse(ACTION_WITHDRAW_SPECIFIED, (viewer, identifier, nbtHolder) -> {
                 this.depositOrWithdraw(player, bank, nbtHolder, MODE_WITHDRAW, false, () -> this.show(player, bank, viewer.getCallback()));
-            })
-        );
+            });
+
+            lastInput.remove(player.getUniqueId());
+        });
     }
 
     private void depositOrWithdraw(@NonNull Player player, @NonNull Bank bank, @Nullable NightNbtHolder nbtHolder,
@@ -162,7 +169,9 @@ public class BankManagementDialog extends Dialog<Bank> {
         Currency currency = EconomyBridge.api().getCurrency(currencyId);
         if (currency == null) return;
 
-        double amount = all ? -1D : Math.abs(nbtHolder.getDouble(JSON_AMOUNT, 0D));
+        double input = Math.abs(nbtHolder.getDouble(JSON_AMOUNT, 0D));
+        lastInput.put(player.getUniqueId(), input);
+        double amount = all ? -1D : input;
 
         if (mode == MODE_DEPOSIT) {
             this.bankManager.depositToBank(player, bank, currency, amount, refreshUI);
