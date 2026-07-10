@@ -49,6 +49,7 @@ import su.nightexpress.nightcore.util.ItemUtil;
 import su.nightexpress.nightcore.util.Lists;
 import su.nightexpress.nightcore.util.Players;
 import su.nightexpress.nightcore.util.bukkit.NightItem;
+import su.nightexpress.nightcore.util.placeholder.CommonPlaceholders;
 import su.nightexpress.nightcore.util.placeholder.PlaceholderContext;
 import su.nightexpress.nightcore.util.text.night.wrapper.TagWrappers;
 
@@ -631,6 +632,10 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
         ItemStack modified = new ItemStack(itemStack);
         PlaceholderContext.Builder builder = PlaceholderContext.builder();
         List<String> lore = ItemUtil.getLoreSerialized(modified);
+
+        if (this.isPlaceholderIntegrationEnabled()) {
+            builder.andThen(CommonPlaceholders.forPlaceholderAPI(player));
+        }
 
         if (units <= 0) {
             lore.add(this.amountText);
