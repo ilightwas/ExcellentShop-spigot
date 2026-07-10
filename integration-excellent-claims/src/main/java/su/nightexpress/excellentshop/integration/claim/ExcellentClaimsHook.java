@@ -1,17 +1,29 @@
 package su.nightexpress.excellentshop.integration.claim;
 
+import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.jspecify.annotations.NonNull;
-import su.nightexpress.excellentclaims.ClaimsAPI;
+import org.jspecify.annotations.NullMarked;
+
 import su.nightexpress.excellentclaims.api.claim.Claim;
+import su.nightexpress.excellentclaims.api.claim.OwnableClaim;
 import su.nightexpress.excellentshop.api.claim.ClaimHook;
 
+@NullMarked
 public class ExcellentClaimsHook implements ClaimHook {
 
+    private final ClaimsAPIService apiService;
+
+    public ExcellentClaimsHook() {
+        this.apiService = new ClaimsAPIService();
+    }
+
     @Override
-    public boolean isInOwnClaim(@NonNull Player player, @NonNull Block block) {
-        Claim claim = ClaimsAPI.getClaimManager().getPrioritizedClaim(player.getLocation());
-        return claim != null && claim.isOwner(player);
+    public boolean isInOwnClaim(Player player, Block block) {
+        Location location = player.getLocation();
+        if (location == null) return false;
+
+        Claim claim = this.apiService.getClaimsAPI().getPrioritizedClaim(location);
+        return claim instanceof OwnableClaim ownable && ownable.isOwner(player);
     }
 }

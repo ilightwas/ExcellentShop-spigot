@@ -11,6 +11,7 @@ softdepend:
   - AdvancedRegionMarket
   - GriefPrevention
   - HuskClaims
+  - ExcellentClaims
   - PlaceholderAPI
   - ProtocolLib
   - packetevents
