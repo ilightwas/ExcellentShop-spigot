@@ -66,7 +66,7 @@ public class StockOptions implements Writeable {
         if (this.restockMinAmount < 0 || this.restockMaxAmount < 0) return -1;
         if (this.restockMaxAmount <= this.restockMinAmount) return this.restockMinAmount;
 
-        return Randomizer.nextInt(this.restockMinAmount, this.restockMaxAmount);
+        return Randomizer.nextInt(this.restockMinAmount, this.restockMaxAmount + 1);
     }
 
     public boolean isEnabled() {
