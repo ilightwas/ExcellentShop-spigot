@@ -24,6 +24,8 @@ public class ExcellentClaimsHook implements ClaimHook {
         if (location == null) return false;
 
         Claim claim = this.apiService.getClaimsAPI().getPrioritizedClaim(location);
+        if (claim == null || claim.isBackgroundClaim()) return false;
+
         return claim instanceof OwnableClaim ownable && ownable.isOwner(player);
     }
 }
