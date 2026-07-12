@@ -153,6 +153,11 @@ public class ItemContent extends ProductContent {
         return this.adaptedItem.itemStack().map(ItemStack::getMaxStackSize).orElse(1);
     }
 
+    @Override
+    public int getMaxUnitsInStack() {
+        return this.getMaxStackSize() / this.getUnitAmount();
+    }
+
     public boolean isItemMatches(@NonNull ItemStack other) {
         if (!this.isValid()) return false;
 

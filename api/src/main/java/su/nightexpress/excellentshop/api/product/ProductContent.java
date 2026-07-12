@@ -44,4 +44,6 @@ public abstract class ProductContent implements Writeable {
     public abstract int getUnitAmount();
 
     public abstract int getMaxStackSize();
+
+    public abstract int getMaxUnitsInStack();
 }

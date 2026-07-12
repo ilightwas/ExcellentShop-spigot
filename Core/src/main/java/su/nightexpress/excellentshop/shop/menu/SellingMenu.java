@@ -1,9 +1,6 @@
 package su.nightexpress.excellentshop.shop.menu;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
@@ -33,9 +30,11 @@ import su.nightexpress.excellentshop.api.shop.Shop;
 import su.nightexpress.excellentshop.api.transaction.EPreparedTransaction;
 import su.nightexpress.excellentshop.core.Lang;
 import su.nightexpress.excellentshop.shop.AbstractShopModule;
+import su.nightexpress.excellentshop.shop.menu.context.SellContext;
+import su.nightexpress.excellentshop.shop.menu.context.SellItemContext;
+import su.nightexpress.excellentshop.shop.menu.context.SellMenuContext;
 import su.nightexpress.excellentshop.util.PacketUtils;
 import su.nightexpress.excellentshop.util.ShopUtils;
-import su.nightexpress.nightcore.NightCorePlugin;
 import su.nightexpress.nightcore.config.FileConfig;
 import su.nightexpress.nightcore.configuration.ConfigTypes;
 import su.nightexpress.nightcore.ui.inventory.MenuRegistry;
@@ -54,30 +53,7 @@ import su.nightexpress.nightcore.util.placeholder.PlaceholderContext;
 import su.nightexpress.nightcore.util.text.night.wrapper.TagWrappers;
 
 @NullMarked
-public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements SellingMenuProvider {
-
-    public record Data(AbstractShopModule module,
-                       Map<ItemStack, ProductData> products,
-                       @Nullable Shop targetShop,
-                       @Nullable Product targetProduct,
-                       int shopPage) {
-
-
-        public BalanceHolder worth(Player player) {
-            BalanceHolder holder = new BalanceHolder();
-
-            this.products.forEach((itemStack, quantified) -> {
-                Product product = quantified.product();
-
-                holder.store(product.getCurrency(), product.getFinalSellPrice(player, quantified.units()));
-            });
-
-            return holder;
-        }
-    }
-
-    private record ProductData(Product product, int units) {
-    }
+public class SellingMenu extends AbstractObjectMenu<SellMenuContext> implements SellingMenuProvider {
 
     @Nullable
     private SellingMenuAdapter adapter;
@@ -88,7 +64,7 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
     private String    amountText;
 
     public SellingMenu(ShopPlugin plugin) {
-        super(plugin, MenuType.GENERIC_9X6, "Selling", Data.class);
+        super(plugin, MenuType.GENERIC_9X6, "Selling", SellMenuContext.class);
     }
 
     @Override
@@ -112,7 +88,8 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
 
     public boolean show(Player player, AbstractShopModule module, @Nullable Shop targetShop,
                         @Nullable Product targetProduct, int shopPage) {
-        return this.show(player, new Data(module, new LinkedHashMap<>(), targetShop, targetProduct, shopPage));
+        return this.show(player,
+            new SellMenuContext(module, new SellContext(this.productSlots.length), targetShop, targetProduct, shopPage));
     }
 
     @Override
@@ -141,7 +118,7 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
                     ))
                     .hideAllComponents()
                 )
-                .condition(context -> !this.getObject(context).products.isEmpty())
+                .condition(context -> !this.getObject(context).sellContext().isEmpty())
                 .displayModifier((context, item) -> item.replace(builder -> builder
                     .with(ShopPlaceholders.GENERIC_PRICE, () -> this.getObject(context).worth(context.getPlayer())
                         .format(Lang.OTHER_PRICE_DELIMITER.text()))
@@ -157,7 +134,7 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
                     ))
                     .hideAllComponents()
                 )
-                .condition(context -> this.getObject(context).products.isEmpty())
+                .condition(context -> this.getObject(context).sellContext().isEmpty())
                 .build()
             )
             .slots(53)
@@ -202,13 +179,8 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
     protected void onClick(ViewerContext context, InventoryClickEvent event) {
         Inventory inventory = event.getInventory();
         int rawSlot = event.getRawSlot();
-        int realSlot = event.getSlot();
-
-        Player player = context.getPlayer();
-        ClickType clickType = event.getClick();
-        ItemStack clickedItem = event.getCurrentItem();
-
         boolean isPlayerSlot = rawSlot >= inventory.getSize();
+        ClickType clickType = event.getClick();
 
         context.getViewer().setNextClickIn(0L); // Allow fast clicks to make sure visuals update always triggers.
 
@@ -217,78 +189,111 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
             return;
         }
 
-        if (isPlayerSlot) {
-            if (clickedItem != null && !clickedItem.getType().isAir()) {
-                if (!this.isSellable(context, clickedItem)) {
-                    // This prevents item visual glitch when using shift+double click.
-                    this.plugin.runTask(() -> this.triggerSlotUpdate(player, realSlot));
-                    return;
-                }
-
-                if (event.isShiftClick()) {
-                    ItemStack copyStack = new ItemStack(clickedItem);
-                    clickedItem.setAmount(0);
-
-                    ItemStack cursor = event.getCursor();
-                    ItemStack saveCursor;
-                    if (cursor != null && !cursor.getType().isAir()) {
-                        saveCursor = new ItemStack(cursor);
-                        cursor.setAmount(0);
-                    }
-                    else saveCursor = new ItemStack(Material.AIR);
-
-                    this.plugin.runTask(() -> {
-                        this.addItem(context, copyStack, false, leftover -> player.getInventory().setItem(realSlot,
-                            leftover));
-
-                        // Save after addItem due to Inventory simulation with all player items.
-                        if (!saveCursor.getType().isAir()) {
-                            Players.addItem(player, saveCursor);
-                            event.getView().setCursor(null);
-                        }
-                    });
-                    return;
-                }
-            }
-
-            // Force trigger packet to add item worth lore.
-            this.plugin.runTask(() -> this.triggerSlotUpdate(player, realSlot));
-            event.setCancelled(false);
+        if (isPlayerSlot && this.handlePlayerSlotClick(context, event)) {
             return;
         }
 
-        if (this.isProductSlot(rawSlot)) {
-            ItemStack cursor = event.getCursor();
-            if (!cursor.getType().isAir()) {
-                ItemStack cursorCopy = new ItemStack(cursor);
-                cursor.setAmount(0);
-
-                this.plugin.runTask(() -> {
-                    this.addItem(context, cursorCopy, true, leftover -> event.getView().setCursor(leftover));
-                });
-                return;
-            }
-
-            if (clickedItem != null && !clickedItem.getType().isAir()) {
-                ItemStack copyStack = new ItemStack(clickedItem);
-                clickedItem.setAmount(0);
-
-                this.plugin.runTask(() -> {
-                    this.removeItem(context, copyStack, removed -> {
-                        if (event.isShiftClick()) {
-                            Players.addItem(player, removed);
-                        }
-                        else {
-                            event.getView().setCursor(new ItemStack(removed));
-                        }
-                    });
-                });
-            }
+        if (this.isProductSlot(rawSlot) && this.handleMenuSlotClick(context, event)) {
             return;
         }
 
         // This prevents item visual glitch when using shift+double click.
-        this.plugin.runTask(() -> this.triggerSlotUpdates(player));
+        this.plugin.runTask(() -> this.triggerSlotUpdates(context.getPlayer()));
+    }
+
+    private boolean handlePlayerSlotClick(ViewerContext context, InventoryClickEvent event) {
+        int realSlot = event.getSlot();
+        Player player = context.getPlayer();
+        ItemStack clickedItem = event.getCurrentItem();
+
+        if (clickedItem == null || clickedItem.getType().isAir()) {
+            // Force trigger packet to add item worth lore.
+            this.plugin.runTask(() -> this.triggerSlotUpdate(player, realSlot));
+            event.setCancelled(false);
+            return true;
+        }
+
+        if (!this.isSellable(context, clickedItem)) {
+            // This prevents item visual glitch when using shift+double click.
+            this.plugin.runTask(() -> this.triggerSlotUpdate(player, realSlot));
+            return true;
+        }
+
+        if (event.isShiftClick()) {
+            ItemStack copyStack = new ItemStack(clickedItem);
+            // Set zero here so this item in player inventory doesnt count when we put player items into fake inventory
+            clickedItem.setAmount(0);
+
+            // Cache cursor so it don't get lost on MenuViewer#refresh
+            ItemStack cursor = event.getCursor();
+            ItemStack saveCursor = cursor == null ? null : new ItemStack(cursor);
+
+            if (!this.addItem(context, copyStack, leftAmount -> clickedItem.setAmount(leftAmount))) return false;
+
+            ItemStack saveClicked = new ItemStack(clickedItem);
+            // Prevent possible duplications using client mods with fast clicks due to 1 tick delay below
+            clickedItem.setAmount(0);
+
+            this.plugin.runTask(player, () -> {
+                context.getViewer().refresh();
+                InventoryView view = context.getViewer().getCurrentView();
+                if (view != null) {
+                    view.setCursor(saveCursor);
+                }
+                player.getInventory().setItem(realSlot, saveClicked);
+            });
+
+            return true;
+        }
+
+        event.setCancelled(false);
+        return false;
+    }
+
+    private boolean handleMenuSlotClick(ViewerContext context, InventoryClickEvent event) {
+        Player player = context.getPlayer();
+
+        ItemStack cursor = event.getCursor();
+        if (!cursor.getType().isAir()) {
+            ItemStack cursorCopy = new ItemStack(cursor);
+            //cursor.setAmount(0);
+
+            if (!this.addItem(context, cursorCopy, leftAmount -> cursor.setAmount(leftAmount))) return false;
+
+            ItemStack saveCursor = cursor == null ? null : new ItemStack(cursor);
+            cursor.setAmount(0);
+
+            this.plugin.runTask(player, () -> {
+                context.getViewer().refresh();
+                InventoryView view = context.getViewer().getCurrentView();
+                if (view != null) {
+                    view.setCursor(saveCursor);
+                }
+            });
+            return true;
+        }
+
+        ItemStack clickedItem = event.getCurrentItem();
+        if (clickedItem != null && !clickedItem.getType().isAir()) {
+            ItemStack copyStack = new ItemStack(clickedItem);
+            clickedItem.setAmount(0);
+
+            if (!this.removeItem(context, copyStack)) return true;
+
+            this.plugin.runTask(player, () -> {
+                context.getViewer().refresh();
+                InventoryView view = context.getViewer().getCurrentView();
+
+                if (event.isShiftClick() || view == null) {
+                    Players.addItem(player, copyStack);
+                }
+                else {
+                    view.setCursor(new ItemStack(copyStack));
+                }
+            });
+        }
+
+        return true;
     }
 
     @Override
@@ -312,15 +317,11 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
     @Override
     protected void onClose(ViewerContext context, InventoryCloseEvent event) {
         Player player = context.getPlayer();
-        Data data = this.getObject(context);
-        data.products.forEach((itemStack, productData) -> {
-            Product product = productData.product;
-            int units = productData.units;
-            int totalAmount = UnitUtils.unitsToAmount(product, units);
+        SellMenuContext menuContext = this.getObject(context);
+        SellContext sellContext = menuContext.sellContext();
 
-            Players.addItem(player, itemStack, totalAmount);
-        });
-        data.products.clear();
+        sellContext.getItemStackCache().forEach(itemStack -> Players.addItem(player, itemStack));
+        sellContext.clearAll();
     }
 
     @Override
@@ -339,29 +340,15 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
     @Override
     public void onReady(ViewerContext context, InventoryView view, Inventory inventory) {
         Player player = context.getPlayer();
-        Data data = this.getObject(context);
+        SellMenuContext menuContext = this.getObject(context);
+        SellContext sellContext = menuContext.sellContext();
 
         int index = 0;
-        for (Map.Entry<ItemStack, ProductData> entry : data.products.entrySet()) {
+        for (ItemStack itemStack : sellContext.getItemStackCache()) {
             if (index >= this.productSlots.length) break;
 
-            Product product = entry.getValue().product;
-            int units = entry.getValue().units;
-            int unitSize = product.getUnitSize();
-
-            int totalAmount = UnitUtils.unitsToAmount(product, units);
-            while (totalAmount > 0) {
-                if (index >= this.productSlots.length) break;
-
-                ItemStack itemStack = new ItemStack(entry.getKey());
-                int maxStackSize = itemStack.getMaxStackSize();
-                int maxUnitsPerStack = maxStackSize / unitSize;
-                int amount = UnitUtils.unitsToAmount(product, maxUnitsPerStack);
-
-                itemStack.setAmount(Math.min(amount, totalAmount));
-                totalAmount -= itemStack.getAmount();
-                inventory.setItem(this.productSlots[index++], itemStack);
-            }
+            inventory.setItem(this.productSlots[index], new ItemStack(itemStack));
+            index++;
         }
 
         this.plugin.runTask(() -> this.triggerSlotUpdates(player));
@@ -380,9 +367,8 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
         if (viewer == null) return true;
 
         InventoryView view = viewer.getCurrentView();
-        if (view == null) return true;
 
-        return slot < view.getTopInventory().getSize();
+        return view == null || slot < view.getTopInventory().getSize();
     }
 
     @Override
@@ -390,133 +376,180 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
         return Lists.contains(this.productSlots, slot);
     }
 
-    private void addItem(ViewerContext context,
-                         ItemStack clickedItem,
-                         boolean resetCursor,
-                         Consumer<@Nullable ItemStack> consumer) {
-        Player player = context.getPlayer();
+    private boolean addItem(ViewerContext context,
+                            ItemStack clickedItem,
+                            Consumer<Integer> callback) {
         Product product = this.findProduct(context, clickedItem);
-        if (product == null) return;
+        if (product == null) return false;
 
         int itemAmount = clickedItem.getAmount();
         int itemUnits = UnitUtils.amountToUnits(product, itemAmount);
-        if (itemUnits <= 0) return;
+        if (itemUnits <= 0) return false;
 
-        Data data = this.getObject(context);
+        SellMenuContext menuContext = this.getObject(context);
+        SellContext sellContext = menuContext.sellContext();
 
-        ItemStack keyStack = new ItemStack(clickedItem);
-        keyStack.setAmount(1);
-
-        ProductData current = data.products.get(keyStack);
-        int currentUnits = current == null ? 0 : current.units;
-
-        // Calculate menu space.
-        int unitSize = product.getUnitSize();
-        int maxStackSize = clickedItem.getMaxStackSize();
-        int maxUnitsPerStack = maxStackSize / unitSize;
-        int maxAllowedUnits = this.productSlots.length * maxUnitsPerStack;
-
-        if (current != null) {
-            maxAllowedUnits -= current.units;
-        }
+        Player player = context.getPlayer();
 
         // Create virtual inventory and fill it with current items to get the max sellable unit amount for the current item/
-        Inventory inventory = this.plugin.getServer().createInventory(null, 54);
+        Inventory fakeInventory = this.plugin.getServer().createInventory(null, 54);
 
         // Add player items.
         for (ItemStack contents : player.getInventory().getStorageContents()) {
             if (contents != null && !contents.getType().isAir()) {
-                inventory.addItem(new ItemStack(contents));
+                fakeInventory.addItem(new ItemStack(contents));
             }
+        }
+
+        for (ItemStack cachedStack : sellContext.getItemStackCache()) {
+            fakeInventory.addItem(new ItemStack(cachedStack));
         }
 
         // Add the current item.
-        inventory.addItem(new ItemStack(clickedItem));
+        fakeInventory.addItem(new ItemStack(clickedItem));
 
-        // Reduce possible sell unit amount of the current item based on currently placed items.
-        for (var entry : data.products.entrySet()) {
-            ItemStack itemStack = entry.getKey();
-            ProductData other = entry.getValue();
-
-            ItemStack stack = new ItemStack(itemStack);
-            stack.setAmount(UnitUtils.unitsToAmount(other.product, other.units));
-
-            inventory.addItem(stack);
-
-            if (other.product == product) continue;
-            int otherUnitSize = other.product.getUnitSize();
-            int otherMaxStackSize = other.product.getEffectivePreview().getMaxStackSize();
-            int otherMaxUnitsPerStack = otherMaxStackSize / otherUnitSize;
-            int otherUnitStacks = (int) Math.ceil(other.units / otherMaxUnitsPerStack);
-
-            maxAllowedUnits -= (otherUnitStacks * maxUnitsPerStack);
+        // Don't allow to put item for sell if limit(s) reached.
+        int maxSellableUnits = product.getMaxSellableUnitAmount(player, fakeInventory);
+        if (maxSellableUnits == 0) {
+            callback.accept(itemAmount);
+            return false;
         }
 
-        if (maxAllowedUnits <= 0) {
-            consumer.accept(clickedItem);
-            return;
+        int amountToReturn;
+        int unitsToSell;
+
+        // No sell limits, continue with original values, nothing to return back
+        if (maxSellableUnits < 0) {
+            unitsToSell = itemUnits;
+            amountToReturn = 0;
+        }
+        // Otherwise calculate units amount based on product limit settings and currently added items for sell
+        else {
+            int alreadyForSellUnits = sellContext.getItems()
+                .stream()
+                .filter(item -> item.getProduct() == product)
+                .mapToInt(SellItemContext::getUnits)
+                .sum();
+            int sellLimitUnits = Math.max(0, maxSellableUnits - alreadyForSellUnits);
+
+            if (sellLimitUnits == 0) {
+                callback.accept(itemAmount);
+                return false;
+            }
+
+            unitsToSell = Math.min(itemUnits, sellLimitUnits);
+            int deltaUnits = Math.max(0, itemUnits - unitsToSell);
+            amountToReturn = UnitUtils.amountToUnits(product, deltaUnits);
         }
 
-        // Don't allow to put item for sell if any limit(s) reached.
-        int maxSellableUnitAmount = product.getMaxSellableUnitAmount(player, inventory);
-        if (maxSellableUnitAmount == 0) {
-            consumer.accept(clickedItem);
-            return;
-        }
+        // Cache item with the limited/reduced amount based on limit calculations above
+        ItemStack itemToCache = new ItemStack(clickedItem);
+        itemToCache.setAmount(UnitUtils.unitsToAmount(product, unitsToSell));
 
-        int pureSellUnits = itemUnits;
-        if (maxSellableUnitAmount > 0) {
-            int toLimit = maxSellableUnitAmount - currentUnits;
-            if (pureSellUnits > toLimit) {
-                pureSellUnits = toLimit;
+        int mergeResult = this.mergeWithTarget(sellContext, product, unitsToSell);
+        if (mergeResult == 0) {
+            // The merge was successful, cache item and apply leftovers back to player inventory.
+            sellContext.cachePlayerItem(itemToCache);
+            sellContext.mergeCache();
+            callback.accept(amountToReturn);
+        }
+        else if (mergeResult == unitsToSell) {
+            // Nothing merged/added, no free space for new items, cancel immediately.
+            if (!sellContext.hasFreeSpace()) {
+                return false;
+            }
+
+            SellItemContext itemContext = new SellItemContext(product, unitsToSell);
+            sellContext.addItem(itemContext);
+            sellContext.cachePlayerItem(itemToCache);
+            sellContext.mergeCache();
+
+            callback.accept(amountToReturn);
+        }
+        else {
+            if (sellContext.hasFreeSpace()) {
+                SellItemContext itemContext = new SellItemContext(product, mergeResult);
+                sellContext.addItem(itemContext);
+                sellContext.cachePlayerItem(itemToCache);
+                sellContext.mergeCache();
+                callback.accept(amountToReturn);
+            }
+            // Partially merged/added, no free space for new items, apply leftovers and cance.
+            else {
+                int amountLeft = UnitUtils.unitsToAmount(mergeResult, product.getUnitSize());
+
+                callback.accept(amountToReturn + amountLeft);
             }
         }
 
-        // Get the smallest of current item units or max sellable unit amount.
-        int finalUnits = pureSellUnits;
-
-        data.products.put(keyStack, new ProductData(product, finalUnits + currentUnits));
-
-        // Calculate leftovers
-        int leftover = itemAmount - UnitUtils.unitsToAmount(product, finalUnits);
-        ItemStack left = null;
-        if (leftover > 0) {
-            left = new ItemStack(clickedItem);
-            left.setAmount(leftover);
-        }
-
-        if (resetCursor) {
-            Optional.ofNullable(context.getViewer().getCurrentView()).ifPresent(view -> view.setCursor(null));
-        }
-
-        context.getViewer().refresh();
-        consumer.accept(left);
+        return true;
     }
 
-    private void removeItem(ViewerContext context, ItemStack clickedItem,
-                            Consumer<ItemStack> consumer) {
-        Data data = this.getObject(context);
+    private int mergeWithTarget(SellContext sellContext, Product product, int leftUnits) {
+        SellItemContext targetItem = sellContext.findItemToMerge(product);
+        if (targetItem == null || targetItem.isFullfilled()) return leftUnits;
 
-        ItemStack keyStack = new ItemStack(clickedItem);
-        keyStack.setAmount(1);
+        int maxUnitsPerStack = product.getMaxUnitsInStack();
+        int targetUnits = targetItem.getUnits();
 
-        ProductData productData = data.products.remove(keyStack);
-        if (productData == null) return;
+        // How much units can be added to the target item that is already added for sell
+        int availableUnits = maxUnitsPerStack - targetUnits;
+        if (availableUnits <= 0) return leftUnits;
 
-        Product product = productData.product;
-
-        int amount = clickedItem.getAmount();
-        int units = UnitUtils.amountToUnits(product, amount);
-        if (units <= 0) return;
-
-        int currentUnits = productData.units;
-        int afterUnits = currentUnits - units;
-        if (afterUnits > 0) {
-            data.products.put(keyStack, new ProductData(product, afterUnits));
+        if (availableUnits >= leftUnits) {
+            targetItem.setUnits(targetUnits + leftUnits);
+            return 0;
         }
 
-        context.getViewer().refresh();
-        consumer.accept(new ItemStack(clickedItem));
+        targetItem.setUnits(maxUnitsPerStack);
+        int result = leftUnits - availableUnits;
+
+        return this.mergeWithTarget(sellContext, product, result);
+    }
+
+    private boolean removeItem(ViewerContext context, ItemStack clickedItem) {
+        Product product = this.findProduct(context, clickedItem);
+        if (product == null) return false;
+
+        SellMenuContext menuContext = this.getObject(context);
+        SellContext sellContext = menuContext.sellContext();
+
+        int itemAmount = clickedItem.getAmount();
+        if (itemAmount <= 0) return false;
+
+        int amountToRemove = itemAmount;
+
+        for (ItemStack cachedStack : sellContext.getItemStackCache()) {
+            if (!cachedStack.isSimilar(clickedItem)) continue;
+
+            int cachedAmount = cachedStack.getAmount();
+            if (cachedAmount >= amountToRemove) {
+                cachedStack.setAmount(cachedAmount - amountToRemove);
+                break;
+            }
+
+            cachedStack.setAmount(0);
+            amountToRemove -= cachedAmount;
+        }
+
+        sellContext.mergeCache();
+
+        int unitsToRemove = UnitUtils.amountToUnits(itemAmount, product.getUnitSize());
+        for (SellItemContext itemContext : sellContext.getItems()) {
+            if (itemContext.getProduct() != product) continue;
+
+            int sellUnits = itemContext.getUnits();
+            if (sellUnits >= unitsToRemove) {
+                itemContext.setUnits(sellUnits - unitsToRemove);
+                break;
+            }
+
+            itemContext.setUnits(0);
+            unitsToRemove -= sellUnits;
+        }
+        sellContext.getItems().removeIf(i -> i.getUnits() <= 0);
+
+        return true;
     }
 
     private void triggerSlotUpdates(Player player) {
@@ -539,15 +572,15 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
     @Nullable
     private Product findProduct(ViewerContext context, ItemStack itemStack) {
         Player player = context.getPlayer();
-        Data data = this.getObject(context);
+        SellMenuContext data = this.getObject(context);
 
-        Product targetProduct = data.targetProduct;
+        Product targetProduct = data.targetProduct();
         if (targetProduct != null) return targetProduct.getContent().isItemMatches(itemStack) ? targetProduct : null;
 
-        Shop targetShop = data.targetShop;
+        Shop targetShop = data.targetShop();
         if (targetShop != null) return targetShop.getBestProduct(itemStack, TradeType.SELL);
 
-        Set<? extends Shop> shops = data.module.getShops(player);
+        Set<? extends Shop> shops = data.module().getShops(player);
         return ShopUtils.findBestProduct(itemStack, TradeType.SELL, shops);
     }
 
@@ -557,29 +590,27 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
     }
 
     private void handleSellOut(ActionContext context) {
-        Data data = this.getObject(context);
-        if (data.products.isEmpty()) return;
+        SellMenuContext data = this.getObject(context);
+        if (data.sellContext().isEmpty()) return;
 
         Player player = context.getPlayer();
-        AbstractShopModule module = data.module;
+        AbstractShopModule module = data.module();
 
         Inventory inventory = this.plugin.getServer().createInventory(null, 54);
         EPreparedTransaction.Builder transaction = EPreparedTransaction.builder(player, TradeType.SELL)
             .setStrict(false)
             .setUserInventory(inventory);
 
-        data.products.forEach((itemStack, productData) -> {
-            Product product = productData.product;
-            int units = productData.units;
-            int totalAmount = UnitUtils.unitsToAmount(product, units);
+        SellContext sellContext = data.sellContext();
 
-            ItemStack stack = new ItemStack(itemStack);
-            stack.setAmount(totalAmount);
+        sellContext.getItemStackCache().forEach(itemStack -> inventory.addItem(new ItemStack(itemStack)));
+        sellContext.getItems().forEach(itemContext -> {
+            Product product = itemContext.getProduct();
+            int units = itemContext.getUnits();
 
-            inventory.addItem(stack).values().forEach(fail -> Players.addItem(player, fail));
             transaction.addProduct(product, units);
         });
-        data.products.clear();
+        sellContext.clearAll();
 
         module.proceedTransaction(transaction.build(), completed -> {
             // Add back to player all items that were not sold.
@@ -599,13 +630,13 @@ public class SellingMenu extends AbstractObjectMenu<SellingMenu.Data> implements
 
     private void goBack(ViewerContext context) {
         Player player = context.getPlayer();
-        Data data = this.getObject(context);
+        SellMenuContext data = this.getObject(context);
 
-        if (data.targetShop != null) {
-            data.targetShop.open(player, data.shopPage);
+        if (data.targetShop() != null) {
+            data.targetShop().open(player, data.shopPage());
         }
-        else if (data.targetProduct != null) {
-            data.targetProduct.getShop().open(player, data.shopPage);
+        else if (data.targetProduct() != null) {
+            data.targetProduct().getShop().open(player, data.shopPage());
         }
         else {
             context.getViewer().closeMenu();

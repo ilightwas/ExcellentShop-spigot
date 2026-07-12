@@ -146,6 +146,11 @@ public class CommandContent extends ProductContent {
     }
 
     @Override
+    public int getMaxUnitsInStack() {
+        return 1;
+    }
+
+    @Override
     public int countSpace(@NonNull Inventory inventory) {
         return -1;
     }

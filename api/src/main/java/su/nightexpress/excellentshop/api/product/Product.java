@@ -81,6 +81,8 @@ public interface Product extends PlaceholderResolvable {
 
     int getMaxStackSize();
 
+    int getMaxUnitsInStack();
+
     void delivery(@NonNull Player player, int count);
 
     void delivery(@NonNull Inventory inventory, int count);

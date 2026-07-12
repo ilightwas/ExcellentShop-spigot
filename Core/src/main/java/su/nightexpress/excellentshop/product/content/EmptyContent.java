@@ -81,6 +81,11 @@ public class EmptyContent extends ProductContent {
     }
 
     @Override
+    public int getMaxUnitsInStack() {
+        return 0;
+    }
+
+    @Override
     public void write(@NonNull FileConfig config, @NonNull String path) {
 
     }

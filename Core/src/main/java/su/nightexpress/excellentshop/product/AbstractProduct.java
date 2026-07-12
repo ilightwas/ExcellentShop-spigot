@@ -322,6 +322,10 @@ public abstract class AbstractProduct<S extends AbstractShop<?>> implements Prod
         return this.content.getMaxStackSize();
     }
 
+    public int getMaxUnitsInStack() {
+        return this.content.getMaxUnitsInStack();
+    }
+
     @Override
     public void delivery(@NonNull Player player, int count) {
         this.delivery(player.getInventory(), count);
